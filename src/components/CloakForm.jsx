@@ -2,7 +2,6 @@ import {
     Box,
     Container,
     Divider,
-    InputAdornment,
     Stack,
     TextField,
     Typography,
@@ -15,6 +14,8 @@ import CTAButton from './CTAButton'
 
 export default function CloakForm() {
     const [text, setText] = useState('')
+    const [isLoading, setIsLoading] = useState(false)
+    const [data, setData] = useState({})
   
     const handleUpload = () => {
       // TODO: integrate file picker and extract content
@@ -26,6 +27,33 @@ export default function CloakForm() {
   
     const handleScan = () => {
       // TODO: trigger redaction engine
+      setIsLoading(true)
+      fetch('http://127.0.0.1:5000/redact', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            name: 'Aishwarya',
+            message: 'Hello from the Chrome extension!',
+        }),
+      })
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`)
+            }
+            return response.json()
+        })
+        .then((data) => {
+            console.log('Response from server:', data)
+            setData(data.message)
+            setIsLoading(false)
+        })
+        .catch((error) => {
+            setIsLoading(false)
+            console.error('Error sending POST request:', error)
+        })
+
     }
   
     return (
@@ -45,17 +73,15 @@ export default function CloakForm() {
                 >
                 Cloak
                 </Typography>
-                <Typography
-                sx={{ fontSize: '13px', color: 'text.secondary', mt: 0.5 }}
-                >
-                Know what to share. Protect what you shouldn't.
+                <Typography sx={{ fontSize: '13px', color: 'text.secondary', mt: 0.5 }}>
+                    Know what to share. Protect what you shouldn't.
                 </Typography>
             </Box>
             </Stack>
-            <Divider/>
+            <Divider sx={{mx: "-2rem", my: "1rem"}}/>
   
         <Typography sx={{ fontSize: "14px" }} mt={4} mb={1} fontWeight={700}>
-          Enter text or upload a document to Cloak.
+            Enter text or upload a document to Cloak.
         </Typography>
   
         <Box sx={{ position: 'relative' }}>
@@ -82,29 +108,26 @@ export default function CloakForm() {
                 }}
             >
                 <CTAButton
-                    label="SCAN"
+                    label={isLoading ? "SCANNING..." : "SCAN"}
                     onClick={handleScan}
-                    disabled={!text}
+                    disabled={isLoading ? true : !text}
                     sx={{ height: 40, width: 70 }}
                 />
             </Box>
         </Box>
-  
         <Stack direction="row" spacing={2} mt={2}>
-        <RoundedOutlinedButton
-            icon={<UploadIcon />}
-            label="Upload document to Cloak"
-            onClick={handleUpload}
-        />
+            <RoundedOutlinedButton
+                icon={<UploadIcon />}
+                label="Upload document to Cloak"
+                onClick={handleUpload}
+            />
 
-        <RoundedOutlinedButton
-            icon={<ContentCopyIcon />}
-            label="Copy contents"
-            onClick={handleCopy}
-        />
-
+            <RoundedOutlinedButton
+                icon={<ContentCopyIcon />}
+                label="Copy contents"
+                onClick={handleCopy}
+            />
         </Stack>
       </Container>
     )
 }
-  
