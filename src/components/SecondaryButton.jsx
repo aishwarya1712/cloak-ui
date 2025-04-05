@@ -1,6 +1,6 @@
 import { Button } from '@mui/material'
 
-export default function CTAButton({
+export default function SecondaryButton({
   label,
   onClick,
   disabled = false,
@@ -17,17 +17,18 @@ export default function CTAButton({
       fullWidth={fullWidth}
       sx={{
         borderRadius: '999px',
-        backgroundColor: disabled ? '#D9D9D9' : '#194AA4',
-        color: '#FFFFFF',
+        backgroundColor: disabled ? '#D9D9D9' : '#FFFFFF',
+        border: "1px solid rgba(0, 77, 159, 0.60)",
+        color: 'rgba(0, 77, 159, 0.60)',
         fontWeight: 700,
-        textTransform: 'uppercase',
+        textTransform: 'none',
         fontSize: '12px',
         px: 3,
         py: 0.5,
         minWidth: 100,
         boxShadow: 'none',
         '&:hover': {
-          backgroundColor: !disabled && '#143d8a',
+          backgroundColor: !disabled && '#FFFFFF',
         },
         '&.Mui-disabled': {
           color: '#FFFFFF',
