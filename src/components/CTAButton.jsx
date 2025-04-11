@@ -6,7 +6,8 @@ export default function CTAButton({
   disabled = false,
   type = 'button',
   sx = {},
-  fullWidth = false
+  fullWidth = false,
+  startIcon
 }) {
   return (
     <Button
@@ -15,9 +16,10 @@ export default function CTAButton({
       disabled={disabled}
       type={type}
       fullWidth={fullWidth}
+      startIcon={startIcon}
       sx={{
         borderRadius: '999px',
-        backgroundColor: disabled ? '#D9D9D9' : '#194AA4',
+        backgroundColor: disabled ? '#D9D9D9' : '#004D9F',
         color: '#FFFFFF',
         fontWeight: 700,
         textTransform: 'uppercase',
