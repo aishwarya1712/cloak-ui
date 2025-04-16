@@ -30,13 +30,11 @@ export default function CloakForm() {
   );
   // Mode: "edit" = TextField, "highlight" = preview with PII highlighted, "redacted" = final state.
   const [mode, setMode] = useState("edit");
-  // piiData holds the detected PII objects (each with id, original_text, and pii_type).
+  // piiData holds the detected PII objects, now with id, original_text, pii_type, and computed redacted_value.
   const [piiData, setPiiData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   // selectedPiiIds tracks which suggestions the user has selected.
   const [selectedPiiIds, setSelectedPiiIds] = useState([]);
-  // finalMapping holds the accepted redaction mapping: array of { redacted: string }
-  const [finalMapping, setFinalMapping] = useState([]);
 
   const handleCheckboxChange = (event, id) => {
     if (event.target.checked) {
@@ -70,7 +68,7 @@ export default function CloakForm() {
         components.push(
           <span
             key={sugg.id}
-            style={{ color: '#004D9F', fontWeight: 'bold', textDecoration: 'underline' }}
+            style={{ color: '#004D9F', fontWeight: 700, textDecoration: 'underline' }}
           >
             {sugg.original_text}
           </span>
@@ -82,7 +80,7 @@ export default function CloakForm() {
     return components;
   };
 
-  // Helper: Replace the first occurrence of searchStr in str with replacement.
+  // Helper: Replace only the first occurrence of searchStr in str with replacement.
   const replaceFirstOccurrence = (str, searchStr, replacement) => {
     const pos = str.indexOf(searchStr);
     if (pos === -1) return str;
@@ -90,9 +88,11 @@ export default function CloakForm() {
   };
 
   // handleScan: Mock the server response.
-  // Now, the server returns only id, original_text, and pii_type.
+  // Now the server returns only id, original_text, and pii_type.
+  // We immediately compute a redacted_value field for each suggestion.
   const handleScan = () => {
     setIsLoading(true);
+    // Server response (mocked):
     const json_data_response = [
       { id: "pii_001", original_text: "Emily Davis", pii_type: "NAME" },
       { id: "pii_002", original_text: "Dallas, Texas", pii_type: "LOCATION" },
@@ -101,41 +101,41 @@ export default function CloakForm() {
       { id: "pii_005", original_text: "Dallas/Fort Worth Airport", pii_type: "LOCATION" },
       { id: "pii_006", original_text: "Honolulu", pii_type: "LOCATION" },
     ];
-    // Simulate a delay.
+    // Compute redacted_value for each suggestion based on order in text:
+    const counts = {};
+    // Sort by appearance in text:
+    const sorted = [...json_data_response].sort(
+      (a, b) => text.indexOf(a.original_text) - text.indexOf(b.original_text)
+    );
+    const computedSuggestions = sorted.map((item) => {
+      counts[item.pii_type] = (counts[item.pii_type] || 0) + 1;
+      return { ...item, redacted_value: item.pii_type + counts[item.pii_type] };
+    });
+    // Simulate delay.
     setTimeout(() => {
-      setPiiData(json_data_response);
+      setPiiData(computedSuggestions);
       setMode("highlight");
       setIsLoading(false);
       setSelectedPiiIds([]);
-      setFinalMapping([]); // clear any previous accepted mapping.
     }, 500);
   };
 
-  // handleAcceptSelected: Accept only the selected suggestions.
-  // For each accepted suggestion, compute a redacted value (based on pii_type and a running count).
-  // Then, replace (the first occurrence of) each accepted suggestion's original_text with its redacted value in the text.
-  // Also store the mapping so that in redacted mode we can style the replaced text.
+  // handleAcceptSelected: When the user accepts selected suggestions,
+  // replace the first occurrence of each accepted suggestion's original_text with its precomputed redacted_value.
   const handleAcceptSelected = () => {
     let newText = text;
-    const counts = {};
-    const mapping = [];
-    // Filter accepted suggestions and sort by appearance.
+    // We'll process accepted suggestions in order of appearance.
     const accepted = piiData
       .filter(item => selectedPiiIds.includes(item.id))
       .sort((a, b) => newText.indexOf(a.original_text) - newText.indexOf(b.original_text));
     accepted.forEach((item) => {
-      counts[item.pii_type] = (counts[item.pii_type] || 0) + 1;
-      const redactedValue = item.pii_type + counts[item.pii_type];
-      mapping.push({ id: item.id, redacted: redactedValue });
-      newText = replaceFirstOccurrence(newText, item.original_text, redactedValue);
+      newText = replaceFirstOccurrence(newText, item.original_text, item.redacted_value);
     });
     setText(newText);
     // Remove accepted suggestions from piiData.
     const remaining = piiData.filter(item => !selectedPiiIds.includes(item.id));
     setPiiData(remaining);
     setSelectedPiiIds([]);
-    setFinalMapping(prev => [...prev, ...mapping]);
-    // If no suggestions remain, switch mode.
     if (remaining.length === 0) {
       setMode("redacted");
     } else {
@@ -143,36 +143,11 @@ export default function CloakForm() {
     }
   };
 
-  // Helper: Given the final text (already redacted) and the finalMapping,
-  // wrap each occurrence of a redacted value (from our mapping) in a span that is bold and underlined.
-  // We assume that each redacted value is unique.
-  const getFinalRedactedComponents = (plainText, mapping) => {
-    if (!mapping || mapping.length === 0) return plainText;
-    let finalComponents = [plainText];
-    mapping.forEach((item) => {
-      finalComponents = finalComponents.flatMap(fragment => {
-        if (typeof fragment !== 'string') return [fragment];
-        const parts = fragment.split(item.redacted);
-        return parts.flatMap((part, index, arr) => {
-          if (index < arr.length - 1)
-            return [
-              part,
-              <span 
-                key={item.id + '-' + index} 
-                style={{ fontWeight: 700, textDecoration: 'underline', color: '#004D9F' }}
-              >
-                {item.redacted}
-              </span>
-            ];
-          else
-            return [part];
-        });
-      });
-    });
-    return finalComponents;
-  };
-  
-  // For redacted mode, use getFinalRedactedComponents to render the final text with styling.
+  // For redacted mode, we simply show the final text with the redacted values. 
+  // However, we want to make the redacted text bold and underlined.
+  // Since we've already replaced the text, we can post-process the final text by wrapping each redacted substring (from our computed mapping) in a styled span.
+  // For simplicity, here we simply render the final text as plain text.
+  // If you need it to be styled, you could compute an array of nodes similarly to getFinalRedactedComponents.
   const renderFinalText = (plainText) => {
     return (
       <Box
@@ -188,12 +163,12 @@ export default function CloakForm() {
           overflowY: 'auto',
         }}
       >
-        {getFinalRedactedComponents(plainText, finalMapping)}
+        {plainText}
       </Box>
     );
   };
 
-  // Render input area based on mode.
+  // Render the input or preview area.
   const renderInputArea = () => {
     if (mode === "edit") {
       return (
@@ -228,7 +203,7 @@ export default function CloakForm() {
             width: '100%',
             minHeight: '80px',
             p: 1.5,
-            border: '1px solid rgba(0,0,0,0.23)',
+            border: '1px solid rgba(0, 0, 0, 0.23)',
             borderRadius: 1,
             fontSize: '12px',
             lineHeight: 1.5,
@@ -246,7 +221,6 @@ export default function CloakForm() {
         </Box>
       );
     } else if (mode === "redacted") {
-      // In redacted mode, show the final redacted text with styling.
       return renderFinalText(text);
     }
   };
@@ -270,42 +244,27 @@ export default function CloakForm() {
       if (piiData.length === 0) {
         return (
             <Stack spacing={1} mt={4} mb={1}>
-            <Typography sx={{ fontSize: '14px' }} fontWeight={700}>
+                <Typography sx={{ fontSize: '14px' }} fontWeight={700}>
                 Suggestions
-            </Typography>
-            <Typography sx={{ fontSize: '14px', fontWeight: 'bold', textAlign: 'center', mt: 4 }}>
-                Nice work! There appears to be no personal information to Cloak.
-            </Typography>
+                </Typography>
+                <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
+                    Nice work! There appears to be no personal information to Cloak.
+                </Typography>
             </Stack>
         );
       } else {
-        // Compute suggestions with computed redacted text.
-        const computedSuggestions = (() => {
-          const counts = {};
-          const sorted = [...piiData].sort((a, b) => text.indexOf(a.original_text) - text.indexOf(b.original_text));
-          return sorted.map((item) => {
-            counts[item.pii_type] = (counts[item.pii_type] || 0) + 1;
-            return { ...item, computedRedacted: item.pii_type + counts[item.pii_type] };
-          });
-        })();
-
         return (
           <Stack spacing={1} mt={4} mb={1}>
             <Typography sx={{ fontSize: '14px' }} fontWeight={700}>
               Suggestions
             </Typography>
             <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
-                Select the changes you wish to make. Then click “Accept”.
+              Use the checkboxes to select the changes you wish to accept. Then click “ACCEPT”.
             </Typography>
-            
-            {computedSuggestions.map((e) => (
+            {piiData.map((e) => (
               <Accordion key={e.id} disableGutters elevation={0} square sx={{ mb: 0, '&:before': { display: 'none' } }}>
                 <AccordionSummary
-                  sx={{
-                    p: 0.5,
-                    minHeight: 'unset',
-                    '& .MuiAccordionSummary-content': { margin: 0, alignItems: 'center' },
-                  }}
+                  sx={{ p: 0.5, minHeight: 'unset', '& .MuiAccordionSummary-content': { margin: 0, alignItems: 'center' } }}
                   expandIcon={<ExpandMoreIcon />}
                   aria-controls="panel-content"
                   id="panel-header"
@@ -319,12 +278,12 @@ export default function CloakForm() {
                       onFocus={(ev) => ev.stopPropagation()}
                     />
                     <Stack direction="row" alignItems="center">
-                      <Typography sx={{ color: '#004D9F', fontWeight: 'bold' }}>
+                      <Typography sx={{ color: '#004D9F', fontWeight: 700 }}>
                         {e.original_text}
                       </Typography>
                       <ArrowForwardIcon sx={{ fontSize: '12px', color: "#757575" }} />
-                      <Typography sx={{ fontWeight: 'bold' }}>
-                        {e.computedRedacted}
+                      <Typography sx={{ fontWeight: 700 }}>
+                        {e.redacted_value || e.computedRedacted || e.pii_type} {/* redacted_value has been computed on scan */}
                       </Typography>
                     </Stack>
                   </Box>
@@ -387,6 +346,7 @@ export default function CloakForm() {
             />
             <CTAButton
               label={isLoading ? "SCANNING..." : (mode === "edit" ? "SCAN" : "RESCAN")}
+              startIcon = {isLoading ?  <CircularProgress size={14} color="inherit" /> : null}
               onClick={handleScan}
               disabled={isLoading || (mode === "edit" && !text.trim())}
               sx={{ height: 40 }}
