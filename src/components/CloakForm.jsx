@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Box,
   Container,
@@ -42,6 +42,76 @@ export default function CloakForm() {
       setSelectedPiiIds((prev) => [...prev, id]);
     } else {
       setSelectedPiiIds((prev) => prev.filter((pid) => pid !== id));
+    }
+  };
+
+  const storageAPI = React.useMemo(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.chrome &&
+      chrome.storage &&
+      chrome.storage.local
+    ) {
+      return chrome.storage.local;
+    } else {
+      return {
+        get: (keys, cb) => {
+          try {
+            const raw = localStorage.getItem(keys);
+            const val = raw ? JSON.parse(raw) : {};
+            cb({ [keys]: val });
+          } catch {
+            cb({ [keys]: undefined });
+          }
+        },
+        set: (obj) => {
+          const key = Object.keys(obj)[0];
+          const val = obj[key];
+          localStorage.setItem(key, JSON.stringify(val));
+        },
+      };
+    }
+  }, []);
+
+  // 1. On mount: rehydrate
+  useEffect(() => {
+    storageAPI.get("cloakState", (res) => {
+      const saved = res.cloakState;
+      if (saved) {
+        setText(saved.text ?? "");
+        setMode(saved.mode ?? "edit");
+        setPiiData(saved.piiData ?? []);
+        setSelectedPiiIds(saved.selectedPiiIds ?? []);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once
+
+  // 2. On every change: persist
+  useEffect(() => {
+    storageAPI.set({
+      cloakState: {
+        text,
+        mode,
+        piiData,
+        selectedPiiIds,
+      },
+    });
+  }, [text, mode, piiData, selectedPiiIds, storageAPI]);
+
+   // Reset handler
+   const handleReset = () => {
+    // 1. Clear React state
+    setText("");
+    setMode("edit");
+    setPiiData([]);
+    setSelectedPiiIds([]);
+
+    // 2. Clear persisted state
+    if (window.chrome?.storage?.local) {
+      chrome.storage.local.remove("cloakState");
+    } else {
+      localStorage.removeItem("cloakState");
     }
   };
 
@@ -393,11 +463,18 @@ export default function CloakForm() {
           </Typography>
           {renderInputArea()}
           <Stack direction="row" spacing={2} mt={2} justifyContent="space-between">
+            <Stack direction={"row"} spacing={2}>
             <RoundedOutlinedButton
               icon={<img src={solarCopyBrokenIcon} alt="Copy icon" />}
               label="Copy contents"
               onClick={handleCopy}
             />
+            <RoundedOutlinedButton
+            
+              label="Clear All"
+              onClick={handleReset}
+            />
+            </Stack>
             <CTAButton
               label={isLoading ? "SCANNING..." : (mode === "edit" ? "SCAN" : "RESCAN")}
               startIcon = {isLoading ?  <CircularProgress size={14} color="inherit" /> : null}
