@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Container,
@@ -14,19 +14,20 @@ import {
   ListItem,
   CircularProgress,
 } from '@mui/material';
-import UploadIcon from '@mui/icons-material/CloudUpload';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import RoundedOutlinedButton from './RoundedOutlinedButton';
 import CTAButton from './CTAButton';
 import SecondaryButton from './SecondaryButton';
 import solarCopyBrokenIcon from '../assets/icons/solar_copy-broken.svg';
+import shieldIcon from '../assets/icons/ic_outline-gpp-good.svg';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import piiReasoning from '../data/pii_reasoning.json'
 
 export default function CloakForm() {
+  //Can you help me plan a vacation? My name is Emily Davis, and I live in Dallas, Texas. I'm looking to go to Hawaii next month with my family for my birthday, which is on May 10th. I'd like to book flights from Dallas/Fort Worth Airport to Honolulu. What should my itinerary be?"
   // Initially, the user inputs plain text.
   const [text, setText] = useState(
-    "Can you help me plan a vacation? My name is Emily Davis, and I live in Dallas, Texas. I'm looking to go to Hawaii next month with my family for my birthday, which is on May 10th. I'd like to book flights from Dallas/Fort Worth Airport to Honolulu. What should my itinerary be?"
+    ""
   );
   // Mode: "edit" = TextField, "highlight" = preview with PII highlighted, "redacted" = final state.
   const [mode, setMode] = useState("edit");
@@ -87,38 +88,95 @@ export default function CloakForm() {
     return str.slice(0, pos) + replacement + str.slice(pos + searchStr.length);
   };
 
+  async function callStreamingApi() {
+    setIsLoading(true);
+    const response = await fetch('http://0.0.0.0:8000/cloak', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        "message": text,
+      }),
+    });
+  
+    if (!response.ok) {
+      console.error('Failed to fetch the data');
+      return;
+    }
+  
+    // This will handle the stream
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let result = '';
+    let done = false;
+  
+    while (!done) {
+      const { value, done: doneReading } = await reader.read();
+      done = doneReading;
+      result += decoder.decode(value, { stream: true });
+    }
+  
+    const jsonResponse = JSON.parse(result);
+    // When the entire response is received, you can do something with the result
+    console.log('Received full response from server:', jsonResponse);
+    const results = jsonResponse["results"]
+    const counts = {};
+    const sorted = [...results].sort(
+          (a, b) => text.indexOf(a.pii_text) - text.indexOf(b.pii_text)
+       );
+    const computedSuggestions = sorted.map((item, key) => {
+      counts[item.pii_type] = (counts[item.pii_type] || 0) + 1;
+      return { ...item, id: "pii_" + key, redacted_value: item.pii_type + counts[item.pii_type] };
+    });
+    setPiiData(computedSuggestions);
+    setMode("highlight");
+    setIsLoading(false);
+    setSelectedPiiIds([]);
+  }
+
   // handleScan: Mock the server response.
   // Now the server returns only id, original_text, and pii_type.
   // We immediately compute a redacted_value field for each suggestion.
+  // const handleScan = () => {
+  //   setIsLoading(true);
+  //   // Server response (mocked):
+  //   const json_data_response = [
+  //     { id: "pii_001", original_text: "Emily Davis", pii_type: "NAME" },
+  //     { id: "pii_002", original_text: "Dallas, Texas", pii_type: "LOCATION" },
+  //     { id: "pii_003", original_text: "Hawaii", pii_type: "LOCATION" },
+  //     { id: "pii_004", original_text: "May 10th", pii_type: "DATE" },
+  //     { id: "pii_005", original_text: "Dallas/Fort Worth Airport", pii_type: "LOCATION" },
+  //     { id: "pii_006", original_text: "Honolulu", pii_type: "LOCATION" },
+  //   ];
+  //   // Compute redacted_value for each suggestion based on order in text:
+  //   const counts = {};
+  //   // Sort by appearance in text:
+  //   const sorted = [...json_data_response].sort(
+  //     (a, b) => text.indexOf(a.original_text) - text.indexOf(b.original_text)
+  //   );
+  //   const computedSuggestions = sorted.map((item) => {
+  //     counts[item.pii_type] = (counts[item.pii_type] || 0) + 1;
+  //     return { ...item, redacted_value: item.pii_type + counts[item.pii_type] };
+  //   });
+  //   // Simulate delay.
+  //   setTimeout(() => {
+  //     setPiiData(computedSuggestions);
+  //     setMode("highlight");
+  //     setIsLoading(false);
+  //     setSelectedPiiIds([]);
+  //   }, 500);
+  // };
+
   const handleScan = () => {
-    setIsLoading(true);
-    // Server response (mocked):
-    const json_data_response = [
-      { id: "pii_001", original_text: "Emily Davis", pii_type: "NAME" },
-      { id: "pii_002", original_text: "Dallas, Texas", pii_type: "LOCATION" },
-      { id: "pii_003", original_text: "Hawaii", pii_type: "LOCATION" },
-      { id: "pii_004", original_text: "May 10th", pii_type: "DATE" },
-      { id: "pii_005", original_text: "Dallas/Fort Worth Airport", pii_type: "LOCATION" },
-      { id: "pii_006", original_text: "Honolulu", pii_type: "LOCATION" },
-    ];
-    // Compute redacted_value for each suggestion based on order in text:
-    const counts = {};
-    // Sort by appearance in text:
-    const sorted = [...json_data_response].sort(
-      (a, b) => text.indexOf(a.original_text) - text.indexOf(b.original_text)
-    );
-    const computedSuggestions = sorted.map((item) => {
-      counts[item.pii_type] = (counts[item.pii_type] || 0) + 1;
-      return { ...item, redacted_value: item.pii_type + counts[item.pii_type] };
+    callStreamingApi()
+    .then(() => {
+      console.log("Streaming API call completed");
+    })
+    .catch((error) => {
+      console.error("Error calling the API:", error);
     });
-    // Simulate delay.
-    setTimeout(() => {
-      setPiiData(computedSuggestions);
-      setMode("highlight");
-      setIsLoading(false);
-      setSelectedPiiIds([]);
-    }, 500);
-  };
+  }
 
   // handleAcceptSelected: When the user accepts selected suggestions,
   // replace the first occurrence of each accepted suggestion's original_text with its precomputed redacted_value.
@@ -127,9 +185,9 @@ export default function CloakForm() {
     // We'll process accepted suggestions in order of appearance.
     const accepted = piiData
       .filter(item => selectedPiiIds.includes(item.id))
-      .sort((a, b) => newText.indexOf(a.original_text) - newText.indexOf(b.original_text));
+      .sort((a, b) => newText.indexOf(a.pii_text) - newText.indexOf(b.pii_text));
     accepted.forEach((item) => {
-      newText = replaceFirstOccurrence(newText, item.original_text, item.redacted_value);
+      newText = replaceFirstOccurrence(newText, item.pii_text, item.redacted_value);
     });
     setText(newText);
     // Remove accepted suggestions from piiData.
@@ -152,21 +210,23 @@ export default function CloakForm() {
     return (
       <Box
         sx={{
-          width: '100%',
-          minHeight: '80px',
-          p: 1.5,
-          border: '1px solid rgba(0, 0, 0, 0.23)',
-          borderRadius: 1,
-          fontSize: '12px',
-          lineHeight: 1.5,
-          whiteSpace: 'pre-wrap',
-          overflowY: 'auto',
+           border: '1px solid rgba(0, 0, 0, 0.23)',p: "18px 20px",
+            minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll",  borderRadius: "10px",lineHeight: "20px"
         }}
       >
         {plainText}
       </Box>
     );
   };
+
+  const formatPiiType = (str) => {
+    return str
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
 
   // Render the input or preview area.
   const renderInputArea = () => {
@@ -175,12 +235,10 @@ export default function CloakForm() {
         <Box
           sx={{
             width: '100%',
-            minHeight: '80px',
-            borderRadius: 1,
+            minHeight: '160px',
+            borderRadius: "10px",
             fontSize: '12px',
-            lineHeight: 1.5,
-            whiteSpace: 'pre-wrap',
-            overflowY: 'auto',
+            whiteSpace: 'pre-wrap'
           }}
         >
           <TextField
@@ -191,7 +249,7 @@ export default function CloakForm() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             InputProps={{
-              style: { fontSize: '12px' },
+              style: { minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll",  borderRadius: "10px",lineHeight: "20px" },
             }}
           />
         </Box>
@@ -200,19 +258,12 @@ export default function CloakForm() {
       return (
         <Box
           sx={{
-            width: '100%',
-            minHeight: '80px',
-            p: 1.5,
-            border: '1px solid rgba(0, 0, 0, 0.23)',
-            borderRadius: 1,
-            fontSize: '12px',
-            lineHeight: 1.5,
-            whiteSpace: 'pre-wrap',
-            overflowY: 'auto',
+            border: '1px solid rgba(0, 0, 0, 0.23)',p: "18px 20px",
+            minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll",  borderRadius: "10px",lineHeight: "20px"
           }}
         >
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "12px" }}>
-            <ErrorOutlineIcon sx={{ fontSize: '14px', color: "#757575" }} />
+            <img src={shieldIcon} alt="Shield icon" />
             <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
               Cloak found {piiData ? piiData.length : 0} instances of personal information. Learn more...
             </Typography>
@@ -237,6 +288,7 @@ export default function CloakForm() {
             <ListItem>2. Click the “Scan” button.</ListItem>
             <ListItem>3. Cloak will scan for sensitive information and suggest changes.</ListItem>
             <ListItem>4. You can accept some or all of the suggested changes.</ListItem>
+            <ListItem>5. Enter the AI tool's response into the box and click the “Revert to original” button.</ListItem>
           </List>
         </>
       );
@@ -279,7 +331,7 @@ export default function CloakForm() {
                     />
                     <Stack direction="row" alignItems="center">
                       <Typography sx={{ color: '#004D9F', fontWeight: 700 }}>
-                        {e.original_text}
+                        {e.pii_text}
                       </Typography>
                       <ArrowForwardIcon sx={{ fontSize: '12px', color: "#757575" }} />
                       <Typography sx={{ fontWeight: 700 }}>
@@ -290,7 +342,7 @@ export default function CloakForm() {
                 </AccordionSummary>
                 <AccordionDetails sx={{ pt: 0, pb: 0, pl: 3 }}>
                   <Typography sx={{ fontStyle: "italic", color: "#757575" }}>
-                    High risk: This data can directly compromise your safety if exposed.
+                    {piiReasoning[e.pii_type] ? piiReasoning[e.pii_type] : formatPiiType(e.pii_type) + " is a sensitive attribute." } 
                   </Typography>
                 </AccordionDetails>
               </Accordion>
@@ -313,6 +365,8 @@ export default function CloakForm() {
     }
   };
 
+  
+
   return (
     <Container sx={{ py: 2 }}>
       {/* Header */}
@@ -330,10 +384,10 @@ export default function CloakForm() {
 
       <Divider sx={{ mx: '-2rem', mt: '1rem' }} />
       
-      {/* Two sections: left (67.5%) and right (32.5%) */}
+      {/* Two sections: left (65%) and right (35%) */}
       <Stack direction="row" spacing={2} divider={<Divider orientation="vertical" flexItem />}>
-        {/* Left side - 67.5% */}
-        <Box sx={{ width: '67.5%' }}>
+        {/* Left side - 65% */}
+        <Box sx={{ width: '65%' }}>
           <Typography sx={{ fontSize: '14px' }} mt={4} mb={1} fontWeight={700}>
             Enter text or upload a document to Cloak.
           </Typography>
@@ -353,8 +407,8 @@ export default function CloakForm() {
             />
           </Stack>
         </Box>
-        {/* Right side - 32.5% */}
-        <Box sx={{ width: '32.5%' }}>
+        {/* Right side - 35% */}
+        <Box sx={{ width: '35%' }}>
           {renderSuggestionArea()}
         </Box>
       </Stack>
