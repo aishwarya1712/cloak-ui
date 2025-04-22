@@ -23,7 +23,6 @@ export default function RoundedOutlinedButton({
         fontSize: '12px',
         borderRadius: '999px',
         borderColor: '#D9D9D9',
-        fontStyle: 'italic',
         textTransform: 'none',
         color: '#757575',
         fontWeight: 400,

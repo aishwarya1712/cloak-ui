@@ -26,7 +26,6 @@ export default function CTAButton({
         fontSize: '12px',
         px: 3,
         py: 0.5,
-        minWidth: 100,
         boxShadow: 'none',
         '&:hover': {
           backgroundColor: !disabled && '#143d8a',

@@ -13,12 +13,15 @@
     "USERNAME": "Usernames can be used to connect data about people across accounts or websites.",
     "KEYS": "Security keys may give others unintended access to accounts and systems.",
     "LOCATION": "Location data can be used to profile or track people.",
+    "GEO_LOCATION": "Location data can be used to profile or track people.",
     "AFFILIATION": "Personal affiliations can be used to profile people or infer identity.",
     "DEMOGRAPHIC_ATTRIBUTE": "Demographic data can reveal sensitive aspects of a person's identity.",
     "TIME": "Dates or times can be used to profile or track people.",
     "HEALTH_INFORMATION": "Medical information shared in chatbots is not protected by health privacy laws.",
     "FINANCIAL_INFORMATION": "Financial data is a key target for fraud and identity crimes.",
     "EDUCATIONAL_RECORD": "Academic records can reveal people's identity, age, or history.",
+    "INTERNAL_COMPANY_INFORMATION": "Internal company details can expose confidential information to unintended audiences.",
+    "ROLE": "Jobs or team roles can be used to profile people or infer identity.",
     "CORPORATE_INFORMATION": "Corporate information may contain confidential data about employees, clients, or operations that can be exploited for fraud, competitive advantage, or security breaches.",
     "DATE": "Dates can reveal personal milestones like birth or medical history, aiding identity theft or profiling. They can be combined with other data to re-identify individuals or infer sensitive life events."
 }

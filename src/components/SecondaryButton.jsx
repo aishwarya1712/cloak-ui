@@ -25,7 +25,6 @@ export default function SecondaryButton({
         fontSize: '12px',
         px: 3,
         py: 0.5,
-        minWidth: 100,
         boxShadow: 'none',
         '&:hover': {
           backgroundColor: !disabled && '#FFFFFF',

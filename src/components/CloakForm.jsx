@@ -17,25 +17,34 @@ import {
 import RoundedOutlinedButton from './RoundedOutlinedButton';
 import CTAButton from './CTAButton';
 import SecondaryButton from './SecondaryButton';
-import solarCopyBrokenIcon from '../assets/icons/solar_copy-broken.svg';
+import copyIcon from '../assets/icons/si_copy-line.svg';
+import shieldInfoIcon from '../assets/icons/shield_info_button.svg'
+import CheckIcon from '@mui/icons-material/Check';
 import shieldIcon from '../assets/icons/ic_outline-gpp-good.svg';
+import resetIcon from '../assets/icons/octicon_trash-24.svg';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import questionIcon from "../assets/icons/stash_question-light.svg"
 import piiReasoning from '../data/pii_reasoning.json'
+import ConfirmModal from './ConfirmModal';
 
 export default function CloakForm() {
   //Can you help me plan a vacation? My name is Emily Davis, and I live in Dallas, Texas. I'm looking to go to Hawaii next month with my family for my birthday, which is on May 10th. I'd like to book flights from Dallas/Fort Worth Airport to Honolulu. What should my itinerary be?"
   // Initially, the user inputs plain text.
-  const [text, setText] = useState(
-    ""
-  );
-  // Mode: "edit" = TextField, "highlight" = preview with PII highlighted, "redacted" = final state.
+  const [text, setText] = useState("");
+  const [textToUncloak, setTextToUncloak] = useState("")
+  // Mode: "edit", "highlight", "redacted", "no_pii", "uncloak", "final".
   const [mode, setMode] = useState("edit");
+  const [copyState, setCopyState] = useState("not_copied")
   // piiData holds the detected PII objects, now with id, original_text, pii_type, and computed redacted_value.
   const [piiData, setPiiData] = useState([]);
+  const [originalPiiData, setOriginalPiiData] = useState([])
   const [isLoading, setIsLoading] = useState(false);
   // selectedPiiIds tracks which suggestions the user has selected.
   const [selectedPiiIds, setSelectedPiiIds] = useState([]);
+  const [uncloakModalOpen, setUncloakModalOpen] = useState(false);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [privacyModalOpen, setPrivacyModalOpen] = useState(false);
 
   const handleCheckboxChange = (event, id) => {
     if (event.target.checked) {
@@ -81,7 +90,11 @@ export default function CloakForm() {
         setText(saved.text ?? "");
         setMode(saved.mode ?? "edit");
         setPiiData(saved.piiData ?? []);
+        setOriginalPiiData(saved.originalPiiData ?? [])
         setSelectedPiiIds(saved.selectedPiiIds ?? []);
+        setUncloakModalOpen(saved.uncloakModalOpen ?? false)
+        setResetModalOpen(saved.resetModalOpen ?? false)
+        setTextToUncloak(saved.textToUncloak ?? "")
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,10 +107,14 @@ export default function CloakForm() {
         text,
         mode,
         piiData,
+        originalPiiData,
         selectedPiiIds,
+        uncloakModalOpen,
+        resetModalOpen,
+        textToUncloak
       },
     });
-  }, [text, mode, piiData, selectedPiiIds, storageAPI]);
+  }, [text, mode, originalPiiData, piiData, selectedPiiIds, storageAPI, uncloakModalOpen, resetModalOpen, textToUncloak]);
 
    // Reset handler
    const handleReset = () => {
@@ -106,6 +123,10 @@ export default function CloakForm() {
     setMode("edit");
     setPiiData([]);
     setSelectedPiiIds([]);
+    setUncloakModalOpen(false)
+    setResetModalOpen(false)
+    setTextToUncloak("")
+
 
     // 2. Clear persisted state
     if (window.chrome?.storage?.local) {
@@ -120,8 +141,23 @@ export default function CloakForm() {
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(text);
+    if(mode ==="edit" || mode === "highlight" || mode === "redacted"){
+      navigator.clipboard.writeText(text);
+    } else if(mode === "uncloak" || mode === "final"){
+      navigator.clipboard.writeText(textToUncloak);
+    }
+    
+    setCopyState("copied")
   };
+
+  useEffect(() => {
+    if (copyState === "copied") {
+      const timer = setTimeout(() => {
+        setCopyState("not_copied");
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [copyState]);
 
   // Helper: Return an array of React nodes with detected PII highlighted.
   // For each suggestion, we wrap the first occurrence of suggestion.original_text in a styled span.
@@ -160,7 +196,7 @@ export default function CloakForm() {
 
   async function callStreamingApi() {
     setIsLoading(true);
-    const response = await fetch('http://0.0.0.0:8000/cloak', {
+    const response = await fetch('http://localhost:8000/cloak', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -200,44 +236,18 @@ export default function CloakForm() {
       return { ...item, id: "pii_" + key, redacted_value: item.pii_type + counts[item.pii_type] };
     });
     setPiiData(computedSuggestions);
-    setMode("highlight");
+    setOriginalPiiData(computedSuggestions);
+    if(results.length === 0){
+      setMode("no_pii");
+    } else {
+      setMode("highlight");
+    }
     setIsLoading(false);
     setSelectedPiiIds([]);
   }
 
-  // handleScan: Mock the server response.
-  // Now the server returns only id, original_text, and pii_type.
-  // We immediately compute a redacted_value field for each suggestion.
-  // const handleScan = () => {
-  //   setIsLoading(true);
-  //   // Server response (mocked):
-  //   const json_data_response = [
-  //     { id: "pii_001", original_text: "Emily Davis", pii_type: "NAME" },
-  //     { id: "pii_002", original_text: "Dallas, Texas", pii_type: "LOCATION" },
-  //     { id: "pii_003", original_text: "Hawaii", pii_type: "LOCATION" },
-  //     { id: "pii_004", original_text: "May 10th", pii_type: "DATE" },
-  //     { id: "pii_005", original_text: "Dallas/Fort Worth Airport", pii_type: "LOCATION" },
-  //     { id: "pii_006", original_text: "Honolulu", pii_type: "LOCATION" },
-  //   ];
-  //   // Compute redacted_value for each suggestion based on order in text:
-  //   const counts = {};
-  //   // Sort by appearance in text:
-  //   const sorted = [...json_data_response].sort(
-  //     (a, b) => text.indexOf(a.original_text) - text.indexOf(b.original_text)
-  //   );
-  //   const computedSuggestions = sorted.map((item) => {
-  //     counts[item.pii_type] = (counts[item.pii_type] || 0) + 1;
-  //     return { ...item, redacted_value: item.pii_type + counts[item.pii_type] };
-  //   });
-  //   // Simulate delay.
-  //   setTimeout(() => {
-  //     setPiiData(computedSuggestions);
-  //     setMode("highlight");
-  //     setIsLoading(false);
-  //     setSelectedPiiIds([]);
-  //   }, 500);
-  // };
 
+  
   const handleScan = () => {
     callStreamingApi()
     .then(() => {
@@ -245,8 +255,35 @@ export default function CloakForm() {
     })
     .catch((error) => {
       console.error("Error calling the API:", error);
+      setIsLoading(false);
     });
   }
+
+  const handleModalAccept = () => {
+    setMode("uncloak")
+    setUncloakModalOpen(false)
+  }
+
+  const handleUncloak = () => {
+    console.log("in handle uncloak")
+    // Helper to escape special regex chars
+    const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  
+    // Start from the user’s input
+    let result = textToUncloak;
+    
+    console.log("original pii data is: ", originalPiiData)
+    // For each mapping, replace **all** occurrences of redacted_value with the original pii_text
+    originalPiiData.forEach(({ redacted_value, pii_text }) => {
+      console.log("redacted_value is: ", redacted_value)
+      const re = new RegExp(`\\b${escapeRe(redacted_value)}\\b`, 'g');
+      result = result.replace(re, pii_text);
+    });
+  
+    // Put the un‑cloaked text back into the textarea
+    setTextToUncloak(result);
+    setMode("final")
+  };
 
   // handleAcceptSelected: When the user accepts selected suggestions,
   // replace the first occurrence of each accepted suggestion's original_text with its precomputed redacted_value.
@@ -284,6 +321,12 @@ export default function CloakForm() {
             minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll",  borderRadius: "10px",lineHeight: "20px"
         }}
       >
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "12px" }}>
+            <img src={shieldIcon} alt="Shield icon" />
+            <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
+            Cloak did not find any personal information! Learn more...
+            </Typography>
+          </Stack>
         {plainText}
       </Box>
     );
@@ -302,24 +345,17 @@ export default function CloakForm() {
   const renderInputArea = () => {
     if (mode === "edit") {
       return (
-        <Box
-          sx={{
-            width: '100%',
-            minHeight: '160px',
-            borderRadius: "10px",
-            fontSize: '12px',
-            whiteSpace: 'pre-wrap'
-          }}
-        >
+        <Box>
           <TextField
             multiline
             minRows={6}
             fullWidth
-            placeholder="Enter the text you wish to Cloak"
+            placeholder="Enter the text you wish to Cloak."
             value={text}
             onChange={(e) => setText(e.target.value)}
+            sx={{ minHeight: '160px', maxHeight: '340px', overflowY: "scroll" }}
             InputProps={{
-              style: { minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll",  borderRadius: "10px",lineHeight: "20px" },
+              style: {fontSize: '12px', borderRadius: "10px", lineHeight: "20px" },
             }}
           />
         </Box>
@@ -341,114 +377,170 @@ export default function CloakForm() {
           {getHighlightedComponents(text, piiData)}
         </Box>
       );
-    } else if (mode === "redacted") {
+    } else if (mode === "redacted" || mode === "no_pii") {
       return renderFinalText(text);
-    }
-  };
-
-  const renderSuggestionArea = () => {
-    if (mode === "edit") {
+    } else if(mode === "uncloak" || mode === "final"){
       return (
-        <>
-          <Typography sx={{ fontSize: '14px' }} mt={4} mb={1} fontWeight={700}>
-            How to Use Cloak
-          </Typography>
-          <List sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
-            <ListItem>1. Enter your text into the box.</ListItem>
-            <ListItem>2. Click the “Scan” button.</ListItem>
-            <ListItem>3. Cloak will scan for sensitive information and suggest changes.</ListItem>
-            <ListItem>4. You can accept some or all of the suggested changes.</ListItem>
-            <ListItem>5. Enter the AI tool's response into the box and click the “Revert to original” button.</ListItem>
-          </List>
-        </>
-      );
-    } else if (mode === "highlight" || mode === "redacted") {
-      if (piiData.length === 0) {
-        return (
-            <Stack spacing={1} mt={4} mb={1}>
-                <Typography sx={{ fontSize: '14px' }} fontWeight={700}>
-                Suggestions
-                </Typography>
-                <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
-                    Nice work! There appears to be no personal information to Cloak.
-                </Typography>
-            </Stack>
-        );
-      } else {
-        return (
-          <Stack spacing={1} mt={4} mb={1}>
-            <Typography sx={{ fontSize: '14px' }} fontWeight={700}>
-              Suggestions
-            </Typography>
-            <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
-              Use the checkboxes to select the changes you wish to accept. Then click “ACCEPT”.
-            </Typography>
-            {piiData.map((e) => (
-              <Accordion key={e.id} disableGutters elevation={0} square sx={{ mb: 0, '&:before': { display: 'none' } }}>
-                <AccordionSummary
-                  sx={{ p: 0.5, minHeight: 'unset', '& .MuiAccordionSummary-content': { margin: 0, alignItems: 'center' } }}
-                  expandIcon={<ExpandMoreIcon />}
-                  aria-controls="panel-content"
-                  id="panel-header"
-                >
-                  <Box display="flex" justifyContent="space-between" alignItems="center" gap={1}>
-                    <Checkbox
-                      sx={{ p: 0, m: 0 }}
-                      checked={selectedPiiIds.includes(e.id)}
-                      onChange={(event) => handleCheckboxChange(event, e.id)}
-                      onClick={(ev) => ev.stopPropagation()}
-                      onFocus={(ev) => ev.stopPropagation()}
-                    />
-                    <Stack direction="row" alignItems="center">
-                      <Typography sx={{ color: '#004D9F', fontWeight: 700 }}>
-                        {e.pii_text}
-                      </Typography>
-                      <ArrowForwardIcon sx={{ fontSize: '12px', color: "#757575" }} />
-                      <Typography sx={{ fontWeight: 700 }}>
-                        {e.redacted_value || e.computedRedacted || e.pii_type} {/* redacted_value has been computed on scan */}
-                      </Typography>
-                    </Stack>
-                  </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ pt: 0, pb: 0, pl: 3 }}>
-                  <Typography sx={{ fontStyle: "italic", color: "#757575" }}>
-                    {piiReasoning[e.pii_type] ? piiReasoning[e.pii_type] : formatPiiType(e.pii_type) + " is a sensitive attribute." } 
-                  </Typography>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-            <Stack direction="row" spacing={1} alignItems="center">
-              <SecondaryButton
-                label="Select all"
-                onClick={() => setSelectedPiiIds(piiData.map(item => item.id))}
-                sx={{ height: 32, fontStyle: "italic", fontWeight: "normal" }}
-              />
-              <CTAButton
-                label="ACCEPT"
-                onClick={handleAcceptSelected}
-                sx={{ height: 32 }}
-              />
-            </Stack>
-          </Stack>
-        );
-      }
+        <Box
+                sx={{
+                  width: '100%',
+                  minHeight: '160px',
+                  borderRadius: "10px",
+                  fontSize: '12px',
+                  whiteSpace: 'pre-wrap'
+                }}
+              >
+          <TextField
+            multiline
+            minRows={6}
+            fullWidth
+            placeholder="Enter the text you wish to Uncloak"
+            value={textToUncloak}
+            onChange={(e) => setTextToUncloak(e.target.value)}
+            sx={{ minHeight: '160px', maxHeight: '340px', overflowY: "scroll" }}
+            InputProps={{
+              style: {fontSize: '12px', borderRadius: "10px", lineHeight: "20px" },
+            }}
+          />
+          </Box>
+      )
     }
   };
 
+  const instructionLists = {
+    edit: [
+      "1. Enter text into the box.",
+      "2. Click Cloak.",
+      "3. Cloak will suggest changes."
+    ],
+    no_pii: [
+      "4. Nice work! There appears to be no personal information to Cloak. Click “Reset” to restart."
+    ],
+    uncloak: [
+      "6. Enter the AI tool's response into the box.",
+      "7. Click “Uncloak” to replace Cloaked terms with their original counterparts."
+    ],
+    final: [
+      "8. Copy the Uncloaked text.",
+      "9. When you're done, click “Reset”."
+    ]
+  };
   
+  const InstructionBlock = ({ items }) => (
+    <>
+      <Typography sx={{ fontSize: '14px' }} mt={4} mb={1} fontWeight={700}>
+        How to Use
+      </Typography>
+      <List sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
+        {items.map((text, i) => (
+          <ListItem key={i}>{text}</ListItem>
+        ))}
+      </List>
+    </>
+  );
+  
+  const renderSuggestionArea = () => {
+    // Simple instruction modes
+    if (instructionLists[mode]) {
+      return <InstructionBlock items={instructionLists[mode]} />;
+    }
+  
+    // Complex PII highlight/redacted mode
+    if (mode === "highlight" || mode === "redacted") {
+      return (
+        <Stack spacing={1} mt={4} mb={1}>
+          <InstructionBlock items={[
+            "4. Select the changes you wish to make. Then click “Accept”.",
+            "5. Copy the Cloaked text and paste it into your AI tool of choice. Then click “Next”."
+          ]} />
+  
+          {piiData.map(e => (
+            <Accordion
+              key={e.id}
+              disableGutters
+              elevation={0}
+              square
+              sx={{ mb: 0, '&:before': { display: 'none' } }}
+            >
+              <AccordionSummary
+                sx={{
+                  p: 0.5,
+                  minHeight: 'unset',
+                  '& .MuiAccordionSummary-content': { margin: 0, alignItems: 'center' }
+                }}
+                expandIcon={<ExpandMoreIcon />}
+                aria-controls={`panel-content-${e.id}`}
+                id={`panel-header-${e.id}`}
+              >
+                <Box display="flex" justifyContent="space-between" alignItems="center" gap={1}>
+                  <Checkbox
+                    sx={{ p: 0, m: 0 }}
+                    checked={selectedPiiIds.includes(e.id)}
+                    onChange={ev => handleCheckboxChange(ev, e.id)}
+                    onClick={ev => ev.stopPropagation()}
+                    onFocus={ev => ev.stopPropagation()}
+                  />
+                  <Stack direction="row" alignItems="center">
+                    <Typography sx={{ color: '#004D9F', fontWeight: 700 }}>
+                      {e.pii_text}
+                    </Typography>
+                    <ArrowForwardIcon sx={{ fontSize: '12px', color: "#757575" }} />
+                    <Typography fontWeight={700}>
+                      {e.redacted_value || e.computedRedacted || e.pii_type}
+                    </Typography>
+                  </Stack>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0, pb: 0, pl: 3 }}>
+                <Typography sx={{ fontStyle: "italic", color: "#757575" }}>
+                  {piiReasoning[e.pii_type]
+                    ? piiReasoning[e.pii_type]
+                    : `${formatPiiType(e.pii_type)} is a sensitive attribute.`}
+                </Typography>
+              </AccordionDetails>
+            </Accordion>
+          ))}
+  
+          <Stack direction="row" spacing={1} alignItems="center">
+            <SecondaryButton
+              label="SELECT ALL"
+              onClick={() => setSelectedPiiIds(piiData.map(item => item.id))}
+              sx={{ fontWeight: "bold", height: 40 }}
+            />
+            <CTAButton
+              label="ACCEPT"
+              onClick={handleAcceptSelected}
+              sx={{ height: 40 }}
+            />
+          </Stack>
+        </Stack>
+      );
+    }
+  
+    return null;
+  };
+  
+
+  const handleLearnMore = () => {
+    // pass
+    setPrivacyModalOpen(false)
+  }
 
   return (
     <Container sx={{ py: 2 }}>
       {/* Header */}
       <Stack direction="row" spacing={1.5} alignItems="center">
         <Box sx={{ width: 49, height: 49, bgcolor: '#004D9F' }} />
-        <Box>
+        <Box sx={{ flexGrow: 1 }}>
           <Typography sx={{ fontSize: '36px', lineHeight: 1 }} fontWeight={700}>
             Cloak
           </Typography>
-          <Typography sx={{ fontSize: '13px', color: 'text.secondary', mt: 0.5 }}>
-            Know what to share. Protect what you shouldn't.
-          </Typography>
+          <Stack direction="row" justifyContent={"space-between"}>
+            <Typography sx={{ fontSize: '13px', mt: 0.5 }}>
+              Know what to share. Protect what you shouldn't.
+            </Typography>
+            <img src={shieldInfoIcon} alt="shield info icon" style={{cursor: "pointer"}} onClick={() => setPrivacyModalOpen(true)}/>
+          </Stack>
         </Box>
       </Stack>
 
@@ -465,24 +557,112 @@ export default function CloakForm() {
           <Stack direction="row" spacing={2} mt={2} justifyContent="space-between">
             <Stack direction={"row"} spacing={2}>
             <RoundedOutlinedButton
-              icon={<img src={solarCopyBrokenIcon} alt="Copy icon" />}
-              label="Copy contents"
-              onClick={handleCopy}
+              icon={<img src={resetIcon} alt="Reset icon" />}
+              label="Reset"
+              onClick={() => setResetModalOpen(true)}
+              sx = {{ fontStyle: "normal"}}
             />
             <RoundedOutlinedButton
-            
-              label="Clear All"
-              onClick={handleReset}
+              icon={copyState === "not_copied" ? <img src={copyIcon} alt="Copy icon" /> : <CheckIcon sx={{fontSize: "12px"}}/> }
+              label={copyState === "not_copied" ? "Copy" : "Copied!"}
+              disabled={copyState === "copied"}
+              onClick={handleCopy}
             />
+
             </Stack>
-            <CTAButton
-              label={isLoading ? "SCANNING..." : (mode === "edit" ? "SCAN" : "RESCAN")}
-              startIcon = {isLoading ?  <CircularProgress size={14} color="inherit" /> : null}
-              onClick={handleScan}
-              disabled={isLoading || (mode === "edit" && !text.trim())}
-              sx={{ height: 40 }}
+            
+            {mode === "edit" ? 
+              <CTAButton
+                label={isLoading ? "CLOAKING..." : "CLOAK"}
+                startIcon = {isLoading ?  <CircularProgress size={14} color="inherit" /> : null}
+                onClick={handleScan}
+                disabled={isLoading || (mode === "edit" && !text.trim())}
+                sx={{ height: 40, minWidth: 100 }}
+              /> : 
+              (mode === "highlight" || mode === "redacted" ? 
+              <CTAButton
+                label={ "NEXT"}
+                onClick={() => setUncloakModalOpen(true) }
+                sx={{ height: 40 }}
+              /> :
+              <CTAButton
+                label={mode === "uncloak" ? "UNCLOAK" : "RESET"}
+                onClick={mode === "uncloak" ? handleUncloak : () => setResetModalOpen(true)}
+                sx={{ height: 40 }}
+              />)
+            }
+            
+            <ConfirmModal
+              open={uncloakModalOpen}
+              onClose={() => setUncloakModalOpen(false)}
+              titleIcon={<img src={questionIcon} alt="Question icon" />}
+              title="Do you want to Uncloak?"
+              description="Do you want to uncloak the response from your AI tool? Uncloaking will replace Cloaked terms with their original, non-redacted counterparts."
+              secondaryButton={
+                <SecondaryButton
+                  label="NO, RESET ALL"
+                  onClick={handleReset}
+                  sx={{ fontWeight: 'bold', height: 40 }}
+                />
+              }
+              ctaButton={
+                <CTAButton
+                  label="YES, PROCEED"
+                  onClick={handleModalAccept}
+                  sx={{ height: 40 }}
+                />
+              }
+            />
+            <ConfirmModal 
+               open={resetModalOpen}
+               onClose={() => setResetModalOpen(false)}
+               titleIcon={<img src={questionIcon} alt="Warning icon" />}
+               title="Warning!"
+               description="This will clear all data related to your query. You will not be able to Uncloak responses related to this query. Are you sure you want to reset?"
+               secondaryButton={
+                 <SecondaryButton
+                   label="NO, CANCEL"
+                   onClick={() => setResetModalOpen(false)}
+                   sx={{ fontWeight: 'bold', height: 40 }}
+                 />
+               }
+               ctaButton={
+                 <CTAButton
+                   label="YES, RESET ALL"
+                   onClick={handleReset}
+                   sx={{ height: 40 }}
+                 />
+               }
+            />
+            <ConfirmModal 
+               open={privacyModalOpen}
+               onClose={() => setPrivacyModalOpen(false)}
+               titleIcon={<img src={shieldIcon} alt="Shield info icon" />}
+               title="Your Privacy, Fully Protected"
+               description={
+                <Stack spacing={1}>
+                  <Typography>All data you enter is stored locally on your device for the duration of your session.</Typography>
+                  <Typography>Redactions are powered by a local LLM running on your computer, so your personal information is never sent to third-party servers or major tech companies.</Typography>
+                  <Typography>Our code is fully open source, and we never access or collect user data. You're in full control, always.</Typography>
+                </Stack>
+               }
+               secondaryButton={
+                 <SecondaryButton
+                   label="LEARN MORE"
+                   onClick={handleLearnMore}
+                   sx={{ fontWeight: 'bold', height: 40 }}
+                 />
+               }
+               ctaButton={
+                 <CTAButton
+                   label="GOT IT!"
+                   onClick={() => setPrivacyModalOpen(false)}
+                   sx={{ height: 40 }}
+                 />
+               }
             />
           </Stack>
+          
         </Box>
         {/* Right side - 35% */}
         <Box sx={{ width: '35%' }}>
