@@ -2,7 +2,8 @@ import { defineManifest } from '@crxjs/vite-plugin'
 
 export default defineManifest({
   manifest_version: 3,
-  name: 'Cloak UI',
+  name: 'Cloak',
+  description: 'The smartest thing you\'ll never send.',
   version: '1.0.0',
   action: {
     default_popup: 'index.html',
