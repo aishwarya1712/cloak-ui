@@ -27,6 +27,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import questionIcon from "../assets/icons/stash_question-light.svg"
 import piiReasoning from '../data/pii_reasoning.json'
 import ConfirmModal from './ConfirmModal';
+import cloakIcon from "../assets/icons/CloakIcon.svg"
 
 export default function CloakForm() {
   //Can you help me plan a vacation? My name is Emily Davis, and I live in Dallas, Texas. I'm looking to go to Hawaii next month with my family for my birthday, which is on May 10th. I'd like to book flights from Dallas/Fort Worth Airport to Honolulu. What should my itinerary be?"
@@ -196,7 +197,7 @@ export default function CloakForm() {
 
   async function callStreamingApi() {
     setIsLoading(true);
-    const response = await fetch('https://e0ca-2601-644-680-2180-584-9005-f268-8541.ngrok-free.app/cloak', {
+    const response = await fetch('https://7b1e-73-151-92-222.ngrok-free.app/cloak', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -530,14 +531,15 @@ export default function CloakForm() {
     <Container sx={{ py: 2 }}>
       {/* Header */}
       <Stack direction="row" spacing={1.5} alignItems="center">
-        <Box sx={{ width: 49, height: 49, bgcolor: '#004D9F' }} />
+        {/* <Box sx={{ width: 49, height: 49, bgcolor: '#004D9F' }} /> */}
+        <img src={cloakIcon} alt="Cloak Icon" style={{ width: "49px", height: "50px"}} />
         <Box sx={{ flexGrow: 1 }}>
           <Typography sx={{ fontSize: '36px', lineHeight: 1 }} fontWeight={700}>
             Cloak
           </Typography>
           <Stack direction="row" justifyContent={"space-between"}>
             <Typography sx={{ fontSize: '13px', mt: 0.5 }}>
-              Know what to share. Protect what you shouldn't.
+              The smartest thing you'll never send.
             </Typography>
             <img src={shieldInfoIcon} alt="shield info icon" style={{cursor: "pointer"}} onClick={() => setPrivacyModalOpen(true)}/>
           </Stack>
