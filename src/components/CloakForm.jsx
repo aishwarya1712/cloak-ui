@@ -37,6 +37,7 @@ export default function CloakForm() {
   // Mode: "edit", "highlight", "redacted", "no_pii", "uncloak", "final".
   const [mode, setMode] = useState("edit");
   const [copyState, setCopyState] = useState("not_copied")
+  const [hasCopied, setHasCopied] = useState(false);
   // piiData holds the detected PII objects, now with id, original_text, pii_type, and computed redacted_value.
   const [piiData, setPiiData] = useState([]);
   const [originalPiiData, setOriginalPiiData] = useState([])
@@ -46,6 +47,7 @@ export default function CloakForm() {
   const [uncloakModalOpen, setUncloakModalOpen] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [privacyModalOpen, setPrivacyModalOpen] = useState(false);
+  const redactedTextRef = React.useRef(null);
 
   const handleCheckboxChange = (event, id) => {
     if (event.target.checked) {
@@ -96,6 +98,7 @@ export default function CloakForm() {
         setUncloakModalOpen(saved.uncloakModalOpen ?? false)
         setResetModalOpen(saved.resetModalOpen ?? false)
         setTextToUncloak(saved.textToUncloak ?? "")
+        setHasCopied(saved.hasCopied ?? false)
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -112,10 +115,11 @@ export default function CloakForm() {
         selectedPiiIds,
         uncloakModalOpen,
         resetModalOpen,
-        textToUncloak
+        textToUncloak,
+        hasCopied
       },
     });
-  }, [text, mode, originalPiiData, piiData, selectedPiiIds, storageAPI, uncloakModalOpen, resetModalOpen, textToUncloak]);
+  }, [text, mode, originalPiiData, piiData, selectedPiiIds, storageAPI, hasCopied, uncloakModalOpen, resetModalOpen, textToUncloak]);
 
    // Reset handler
    const handleReset = () => {
@@ -127,7 +131,7 @@ export default function CloakForm() {
     setUncloakModalOpen(false)
     setResetModalOpen(false)
     setTextToUncloak("")
-
+    setHasCopied(false);
 
     // 2. Clear persisted state
     if (window.chrome?.storage?.local) {
@@ -141,6 +145,19 @@ export default function CloakForm() {
     // TODO: integrate file picker and extract content
   };
 
+  useEffect(() => {
+    const handleManualCopy = (e) => {
+      // Check if the selection is within our redacted text container
+      const selection = window.getSelection();
+      if (selection && redactedTextRef.current && redactedTextRef.current.contains(selection.anchorNode)) {
+        setHasCopied(true);
+      }
+    };
+  
+    document.addEventListener("copy", handleManualCopy);
+    return () => document.removeEventListener("copy", handleManualCopy);
+  }, []);
+  
   const handleCopy = () => {
     if(mode ==="edit" || mode === "highlight" || mode === "redacted"){
       navigator.clipboard.writeText(text);
@@ -149,6 +166,7 @@ export default function CloakForm() {
     }
     
     setCopyState("copied")
+    setHasCopied(true); 
   };
 
   useEffect(() => {
@@ -317,21 +335,23 @@ export default function CloakForm() {
   const renderFinalText = (plainText) => {
     return (
       <Box
+        ref={redactedTextRef}
         sx={{
-           border: '1px solid rgba(0, 0, 0, 0.23)',p: "18px 20px",
-            minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll",  borderRadius: "10px",lineHeight: "20px"
+          border: '1px solid rgba(0, 0, 0, 0.23)', p: "18px 20px",
+          minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll", borderRadius: "10px", lineHeight: "20px"
         }}
       >
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "12px" }}>
-            <img src={shieldIcon} alt="Shield icon" />
-            <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
+          <img src={shieldIcon} alt="Shield icon" />
+          <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
             Cloak did not find any personal information! Learn more...
-            </Typography>
-          </Stack>
+          </Typography>
+        </Stack>
         {plainText}
       </Box>
     );
   };
+  
 
   const formatPiiType = (str) => {
     return str
@@ -364,6 +384,7 @@ export default function CloakForm() {
     } else if (mode === "highlight") {
       return (
         <Box
+          ref={redactedTextRef}
           sx={{
             border: '1px solid rgba(0, 0, 0, 0.23)',p: "18px 20px",
             minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll",  borderRadius: "10px",lineHeight: "20px"
@@ -379,7 +400,11 @@ export default function CloakForm() {
         </Box>
       );
     } else if (mode === "redacted" || mode === "no_pii") {
-      return renderFinalText(text);
+      return (
+        <Box ref={redactedTextRef}>
+          {renderFinalText(text)}
+        </Box>
+      );
     } else if(mode === "uncloak" || mode === "final"){
       return (
         <Box
@@ -502,7 +527,7 @@ export default function CloakForm() {
             </Accordion>
           ))}
   
-          <Stack direction="row" spacing={1} alignItems="center">
+          {piiData.length > 0 && <Stack direction="row" spacing={1} alignItems="center">
             <SecondaryButton
               label="SELECT ALL"
               onClick={() => setSelectedPiiIds(piiData.map(item => item.id))}
@@ -513,7 +538,7 @@ export default function CloakForm() {
               onClick={handleAcceptSelected}
               sx={{ height: 40 }}
             />
-          </Stack>
+          </Stack>}
         </Stack>
       );
     }
@@ -586,6 +611,7 @@ export default function CloakForm() {
                 label={ "NEXT"}
                 onClick={() => setUncloakModalOpen(true) }
                 sx={{ height: 40 }}
+                disabled={!hasCopied}
               /> :
               <CTAButton
                 label={mode === "uncloak" ? "UNCLOAK" : "RESET"}
