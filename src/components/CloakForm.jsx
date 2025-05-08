@@ -10,8 +10,6 @@ import {
   AccordionSummary,
   AccordionDetails,
   Checkbox,
-  List,
-  ListItem,
   CircularProgress,
 } from '@mui/material';
 import RoundedOutlinedButton from './RoundedOutlinedButton';
@@ -27,7 +25,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import questionIcon from "../assets/icons/stash_question-light.svg"
 import piiReasoning from '../data/pii_reasoning.json'
 import ConfirmModal from './ConfirmModal';
-import cloakIcon from "../assets/icons/CloakIcon.svg"
+import cloakIcon from "../assets/icons/CloakIcon.png"
 
 export default function CloakForm() {
   //Can you help me plan a vacation? My name is Emily Davis, and I live in Dallas, Texas. I'm looking to go to Hawaii next month with my family for my birthday, which is on May 10th. I'd like to book flights from Dallas/Fort Worth Airport to Honolulu. What should my itinerary be?"
@@ -57,7 +55,7 @@ export default function CloakForm() {
     }
   };
 
-  const storageAPI = React.useMemo(() => {
+  const storageAPI = useMemo(() => {
     if (
       typeof window !== "undefined" &&
       window.chrome &&
@@ -141,10 +139,6 @@ export default function CloakForm() {
     }
   };
 
-  const handleUpload = () => {
-    // TODO: integrate file picker and extract content
-  };
-
   useEffect(() => {
     const handleManualCopy = (e) => {
       // Check if the selection is within our redacted text container
@@ -208,9 +202,11 @@ export default function CloakForm() {
 
   // Helper: Replace only the first occurrence of searchStr in str with replacement.
   const replaceFirstOccurrence = (str, searchStr, replacement) => {
-    const pos = str.indexOf(searchStr);
-    if (pos === -1) return str;
-    return str.slice(0, pos) + replacement + str.slice(pos + searchStr.length);
+   // escape any regex-special chars in searchStr
+   const escaped = searchStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+   // new RegExp(..., 'i') will match case-insensitively
+   const re = new RegExp(escaped, 'i');
+   return str.replace(re, replacement);
   };
 
   async function callStreamingApi() {
@@ -308,13 +304,21 @@ export default function CloakForm() {
   // replace the first occurrence of each accepted suggestion's original_text with its precomputed redacted_value.
   const handleAcceptSelected = () => {
     let newText = text;
+    const lowerNewText = newText.toLowerCase();
     // We'll process accepted suggestions in order of appearance.
     const accepted = piiData
       .filter(item => selectedPiiIds.includes(item.id))
-      .sort((a, b) => newText.indexOf(a.pii_text) - newText.indexOf(b.pii_text));
-    accepted.forEach((item) => {
+      .sort((a, b) => {
+        const idxA = lowerNewText.indexOf(a.pii_text.toLowerCase());
+        const idxB = lowerNewText.indexOf(b.pii_text.toLowerCase());
+        return idxA - idxB;
+      });
+    
+    // do the replacements (case-insensitive)
+    accepted.forEach(item => {
       newText = replaceFirstOccurrence(newText, item.pii_text, item.redacted_value);
     });
+    
     setText(newText);
     // Remove accepted suggestions from piiData.
     const remaining = piiData.filter(item => !selectedPiiIds.includes(item.id));
@@ -341,12 +345,6 @@ export default function CloakForm() {
           minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll", borderRadius: "10px", lineHeight: "20px"
         }}
       >
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "12px" }}>
-          <img src={shieldIcon} alt="Shield icon" />
-          <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
-            Cloak did not find any personal information! Learn more...
-          </Typography>
-        </Stack>
         {plainText}
       </Box>
     );
@@ -376,8 +374,9 @@ export default function CloakForm() {
             onChange={(e) => setText(e.target.value)}
             sx={{ minHeight: '160px', maxHeight: '340px', overflowY: "scroll" }}
             InputProps={{
-              style: {fontSize: '12px', borderRadius: "10px", lineHeight: "20px" },
+              style: {fontSize: '12px', borderRadius: "10px", lineHeight: "20px"},
             }}
+            disabled={isLoading}
           />
         </Box>
       );
@@ -390,12 +389,6 @@ export default function CloakForm() {
             minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll",  borderRadius: "10px",lineHeight: "20px"
           }}
         >
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: "12px" }}>
-            <img src={shieldIcon} alt="Shield icon" />
-            <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
-              Cloak found {piiData ? piiData.length : 0} instances of personal information. Learn more...
-            </Typography>
-          </Stack>
           {getHighlightedComponents(text, piiData)}
         </Box>
       );
@@ -433,52 +426,38 @@ export default function CloakForm() {
     }
   };
 
-  const instructionLists = {
-    edit: [
-      "1. Enter text into the box.",
-      "2. Click Cloak.",
-      "3. Cloak will suggest changes."
-    ],
-    no_pii: [
-      "4. Nice work! There appears to be no personal information to Cloak. Click “Reset” to restart."
-    ],
-    uncloak: [
-      "6. Enter the AI tool's response into the box.",
-      "7. Click “Uncloak” to replace Cloaked terms with their original counterparts."
-    ],
-    final: [
-      "8. Copy the Uncloaked text.",
-      "9. When you're done, click “Reset”."
-    ]
-  };
-  
-  const InstructionBlock = ({ items }) => (
-    <>
-      <Typography sx={{ fontSize: '14px' }} mt={4} mb={1} fontWeight={700}>
-        How to Use
-      </Typography>
-      <List sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
-        {items.map((text, i) => (
-          <ListItem key={i}>{text}</ListItem>
-        ))}
-      </List>
-    </>
-  );
+  // "edit", "highlight", "redacted", "no_pii", "uncloak", "final"
+  const labelInstructions = {
+    edit: "Enter text into the box and click ”Cloak”.",
+    highlight: "Select the changes you wish to make and click “Accept”.",
+    redacted: "Copy the Cloaked text and paste it into your AI tool of choice.",
+    no_pii: "Click “Clear” to Cloak a new piece of text.",
+    uncloak: "Enter the response from your AI tool into the box and click “Uncloak”.",
+    final: "Your text is now Uncloaked! When you're done, click “Clear”"
+  }
+
+  const subtext = {
+    highlight: <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
+    Cloak found {piiData ? piiData.length : 0} instances of personal information.
+  </Typography>,
+    no_pii: <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>Nice work! There appears to be no personal information to Cloak.</Typography>
+  }
+
+  const renderLabelArea = () => {
+    if(labelInstructions[mode]){
+      return labelInstructions[mode]
+    }
+  }
   
   const renderSuggestionArea = () => {
-    // Simple instruction modes
-    if (instructionLists[mode]) {
-      return <InstructionBlock items={instructionLists[mode]} />;
-    }
-  
     // Complex PII highlight/redacted mode
-    if (mode === "highlight" || mode === "redacted") {
+    if (mode === "highlight" || mode === "no_pii") {
       return (
         <Stack spacing={1} mt={4} mb={1}>
-          <InstructionBlock items={[
-            "4. Select the changes you wish to make. Then click “Accept”.",
-            "5. Copy the Cloaked text and paste it into your AI tool of choice. Then click “Next”."
-          ]} />
+          <Typography sx={{ fontSize: '14px' }} mt={4} mb={1} fontWeight={700}>
+            Suggested Changes
+          </Typography>
+          {subtext[mode]}
   
           {piiData.map(e => (
             <Accordion
@@ -545,12 +524,6 @@ export default function CloakForm() {
   
     return null;
   };
-  
-
-  const handleLearnMore = () => {
-    // pass
-    setPrivacyModalOpen(false)
-  }
 
   return (
     <Container sx={{ py: 2 }}>
@@ -559,14 +532,17 @@ export default function CloakForm() {
         {/* <Box sx={{ width: 49, height: 49, bgcolor: '#004D9F' }} /> */}
         <img src={cloakIcon} alt="Cloak Icon" style={{ width: "49px", height: "50px"}} />
         <Box sx={{ flexGrow: 1 }}>
-          <Typography sx={{ fontSize: '36px', lineHeight: 1 }} fontWeight={700}>
+          <Typography sx={{ fontSize: '36px', lineHeight: 1, color: "#004D9F" }}>
             Cloak
           </Typography>
           <Stack direction="row" justifyContent={"space-between"}>
             <Typography sx={{ fontSize: '13px', mt: 0.5 }}>
               The smartest thing you'll never send.
             </Typography>
-            <img src={shieldInfoIcon} alt="shield info icon" style={{cursor: "pointer"}} onClick={() => setPrivacyModalOpen(true)}/>
+            <Stack direction={"row"} alignItems={"center"} spacing={1} sx={{cursor: "pointer"}} onClick={() => setPrivacyModalOpen(true)}>
+              <img src={shieldInfoIcon} alt="shield info icon" style={{cursor: "pointer", height: "16px"}} />
+              <Typography sx={{width: "100px", fontSize: "12px", color: "#757575"}}>Privacy Policy</Typography>
+            </Stack>
           </Stack>
         </Box>
       </Stack>
@@ -576,16 +552,16 @@ export default function CloakForm() {
       {/* Two sections: left (65%) and right (35%) */}
       <Stack direction="row" spacing={2} divider={<Divider orientation="vertical" flexItem />}>
         {/* Left side - 65% */}
-        <Box sx={{ width: '65%' }}>
+        <Box sx={{ width: mode === 'highlight' ? '65%': '100%' }}>
           <Typography sx={{ fontSize: '14px' }} mt={4} mb={1} fontWeight={700}>
-            Enter text or upload a document to Cloak.
+            {renderLabelArea()}
           </Typography>
           {renderInputArea()}
           <Stack direction="row" spacing={2} mt={2} justifyContent="space-between">
             <Stack direction={"row"} spacing={2}>
             <RoundedOutlinedButton
               icon={<img src={resetIcon} alt="Reset icon" />}
-              label="Reset"
+              label="Clear"
               onClick={() => setResetModalOpen(true)}
               sx = {{ fontStyle: "normal"}}
             />
@@ -614,7 +590,7 @@ export default function CloakForm() {
                 disabled={!hasCopied}
               /> :
               <CTAButton
-                label={mode === "uncloak" ? "UNCLOAK" : "RESET"}
+                label={mode === "uncloak" ? "UNCLOAK" : "CLEAR"}
                 onClick={mode === "uncloak" ? handleUncloak : () => setResetModalOpen(true)}
                 sx={{ height: 40 }}
               />)
@@ -624,20 +600,20 @@ export default function CloakForm() {
               open={uncloakModalOpen}
               onClose={() => setUncloakModalOpen(false)}
               titleIcon={<img src={questionIcon} alt="Question icon" />}
-              title="Do you want to Uncloak?"
-              description="Do you want to uncloak the response from your AI tool? Uncloaking will replace Cloaked terms with their original, non-redacted counterparts."
+              title="Optional: Do you want to Uncloak the response from your AI tool?"
+              description="Uncloaking will replace Cloaked terms with their original, non-redacted counterparts. This is an optional step."
               secondaryButton={
                 <SecondaryButton
-                  label="NO, RESET ALL"
+                  label="NO, CLEAR ALL"
                   onClick={handleReset}
                   sx={{ fontWeight: 'bold', height: 40 }}
                 />
               }
               ctaButton={
                 <CTAButton
-                  label="YES, PROCEED"
+                  label="YES, UNCLOAK"
                   onClick={handleModalAccept}
-                  sx={{ height: 40 }}
+                  sx={{ height: 40, fontWeight: "bold" }}
                 />
               }
             />
@@ -656,7 +632,7 @@ export default function CloakForm() {
                }
                ctaButton={
                  <CTAButton
-                   label="YES, RESET ALL"
+                   label="YES, CLEAR ALL"
                    onClick={handleReset}
                    sx={{ height: 40 }}
                  />
@@ -674,13 +650,6 @@ export default function CloakForm() {
                   <Typography>Our code is fully open source, and we never access or collect user data. You're in full control, always.</Typography>
                 </Stack>
                }
-               secondaryButton={
-                 <SecondaryButton
-                   label="LEARN MORE"
-                   onClick={handleLearnMore}
-                   sx={{ fontWeight: 'bold', height: 40 }}
-                 />
-               }
                ctaButton={
                  <CTAButton
                    label="GOT IT!"
@@ -693,11 +662,10 @@ export default function CloakForm() {
           
         </Box>
         {/* Right side - 35% */}
-        <Box sx={{ width: '35%' }}>
+       {(mode === 'highlight' || mode === "no_pii" )&& <Box sx={{ width: '35%' }}>
           {renderSuggestionArea()}
-        </Box>
+        </Box>}
       </Stack>
-      
     </Container>
   );
 }
