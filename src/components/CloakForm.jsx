@@ -23,6 +23,7 @@ import resetIcon from '../assets/icons/octicon_trash-24.svg';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import questionIcon from "../assets/icons/stash_question-light.svg"
+import exclamationIcon from "../assets/icons/ep_warning.svg"
 import piiReasoning from '../data/pii_reasoning.json'
 import ConfirmModal from './ConfirmModal';
 import cloakIcon from "../assets/icons/CloakIcon.png"
@@ -176,28 +177,32 @@ export default function CloakForm() {
   // For each suggestion, we wrap the first occurrence of suggestion.original_text in a styled span.
   const getHighlightedComponents = (plainText, suggestions) => {
     if (!suggestions || suggestions.length === 0) return plainText;
-    let remainingText = plainText;
-    const components = [];
+    let remaining = plainText;
+    const nodes = [];
     suggestions.forEach((sugg) => {
-      const pos = remainingText.indexOf(sugg.original_text);
-      if (pos === -1) {
-        components.push(remainingText);
-        remainingText = "";
+      const target = sugg.pii_text;
+      const lowerRem = remaining.toLowerCase();
+      const lowerTar = target.toLowerCase();
+      const idx = lowerRem.indexOf(lowerTar);
+      // const pos = remainingText.indexOf(sugg.original_text);
+      if (idx === -1) {
+        nodes.push(remaining);
+        remaining = "";
       } else {
-        components.push(remainingText.slice(0, pos));
-        components.push(
+        nodes.push(remaining.slice(0, idx));
+        nodes.push(
           <span
             key={sugg.id}
-            style={{ color: '#004D9F', fontWeight: 700, textDecoration: 'underline' }}
+            style={{ color: '#004D9F', fontWeight: 700 }}
           >
-            {sugg.original_text}
+            {remaining.slice(idx, idx + target.length)}
           </span>
         );
-        remainingText = remainingText.slice(pos + sugg.original_text.length);
+        remaining = remaining.slice(idx + target.length);
       }
     });
-    components.push(remainingText);
-    return components;
+    nodes.push(remaining);
+    return nodes;
   };
 
   // Helper: Replace only the first occurrence of searchStr in str with replacement.
@@ -336,19 +341,80 @@ export default function CloakForm() {
   // Since we've already replaced the text, we can post-process the final text by wrapping each redacted substring (from our computed mapping) in a styled span.
   // For simplicity, here we simply render the final text as plain text.
   // If you need it to be styled, you could compute an array of nodes similarly to getFinalRedactedComponents.
-  const renderFinalText = (plainText) => {
-    return (
-      <Box
-        ref={redactedTextRef}
-        sx={{
-          border: '1px solid rgba(0, 0, 0, 0.23)', p: "18px 20px",
-          minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll", borderRadius: "10px", lineHeight: "20px"
-        }}
-      >
-        {plainText}
-      </Box>
-    );
-  };
+  // const renderFinalText = (plainText) => {
+  //   return (
+  //     <Box
+  //       ref={redactedTextRef}
+  //       sx={{
+  //         border: '1px solid rgba(0, 0, 0, 0.23)', p: "18px 20px", color: "#757575",
+  //         minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll", borderRadius: "10px", lineHeight: "20px"
+  //       }}
+  //     >
+  //       {plainText}
+  //     </Box>
+  //   );
+  // };
+
+  // Wrap each redacted_value in a bold span
+const getRedactedComponents = (plainText, suggestions) => {
+  if (!suggestions || suggestions.length === 0) return plainText;
+  let remaining = plainText;
+  const nodes = [];
+
+  suggestions.forEach((sugg) => {
+    const target = sugg.redacted_value;
+    const idx = remaining.indexOf(target);
+
+    if (idx === -1) {
+      nodes.push(remaining);
+      remaining = "";
+    } else {
+      // push everything before the placeholder
+      nodes.push(remaining.slice(0, idx));
+      // push the placeholder itself, bolded
+      nodes.push(
+        <Typography
+          component="span"
+          key={sugg.id}
+          fontWeight="bold"
+          color="#000000"
+        >
+          {target}
+        </Typography>
+      );
+      // cut past the placeholder
+      remaining = remaining.slice(idx + target.length);
+    }
+  });
+
+  nodes.push(remaining);
+  return nodes;
+};
+
+   const renderFinalText = (plainText) => {
+       // bold-wrap each NAME1, NAME2, etc.
+       const components = getRedactedComponents(plainText, originalPiiData);
+    
+       return (
+         <Box
+           ref={redactedTextRef}
+           sx={{
+             border: '1px solid rgba(0, 0, 0, 0.23)',
+             p: "18px 20px",
+             color: "#757575",
+             minHeight: '160px',
+           maxHeight: '340px',
+             fontSize: '12px',
+            overflowY: "scroll",
+             borderRadius: "10px",
+             lineHeight: "20px"
+           }}
+         >
+           {components}
+         </Box>
+       );
+     };
+    
   
 
   const formatPiiType = (str) => {
@@ -385,7 +451,7 @@ export default function CloakForm() {
         <Box
           ref={redactedTextRef}
           sx={{
-            border: '1px solid rgba(0, 0, 0, 0.23)',p: "18px 20px",
+            border: '1px solid rgba(0, 0, 0, 0.23)', p: "18px 20px", color: "#757575",
             minHeight: '160px', maxHeight: '340px', fontSize: '12px', overflowY: "scroll",  borderRadius: "10px",lineHeight: "20px"
           }}
         >
@@ -406,14 +472,15 @@ export default function CloakForm() {
                   minHeight: '160px',
                   borderRadius: "10px",
                   fontSize: '12px',
-                  whiteSpace: 'pre-wrap'
+                  whiteSpace: 'pre-wrap',
+                  color: "#757575"
                 }}
               >
           <TextField
             multiline
             minRows={6}
             fullWidth
-            placeholder="Enter the text you wish to Uncloak"
+            placeholder="Enter the response from your AI tool."
             value={textToUncloak}
             onChange={(e) => setTextToUncloak(e.target.value)}
             sx={{ minHeight: '160px', maxHeight: '340px', overflowY: "scroll" }}
@@ -429,16 +496,16 @@ export default function CloakForm() {
   // "edit", "highlight", "redacted", "no_pii", "uncloak", "final"
   const labelInstructions = {
     edit: "Enter text into the box and click ”Cloak”.",
-    highlight: "Select the changes you wish to make and click “Accept”.",
+    highlight: `Cloak found ${piiData ? piiData.length : 0} instances of personal information.`,
     redacted: "Copy the Cloaked text and paste it into your AI tool of choice.",
     no_pii: "Click “Clear” to Cloak a new piece of text.",
     uncloak: "Enter the response from your AI tool into the box and click “Uncloak”.",
-    final: "Your text is now Uncloaked! When you're done, click “Clear”"
+    final: "Your text is now Uncloaked! When you're ready, click “Done”."
   }
 
   const subtext = {
     highlight: <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>
-    Cloak found {piiData ? piiData.length : 0} instances of personal information.
+    Select the changes you wish to make and click “Accept”.
   </Typography>,
     no_pii: <Typography sx={{ color: "#757575", fontStyle: "italic", fontSize: "12px" }}>Nice work! There appears to be no personal information to Cloak.</Typography>
   }
@@ -561,7 +628,7 @@ export default function CloakForm() {
             <Stack direction={"row"} spacing={2}>
             <RoundedOutlinedButton
               icon={<img src={resetIcon} alt="Reset icon" />}
-              label="Clear"
+              label="Restart"
               onClick={() => setResetModalOpen(true)}
               sx = {{ fontStyle: "normal"}}
             />
@@ -590,8 +657,8 @@ export default function CloakForm() {
                 disabled={!hasCopied}
               /> :
               <CTAButton
-                label={mode === "uncloak" ? "UNCLOAK" : "CLEAR"}
-                onClick={mode === "uncloak" ? handleUncloak : () => setResetModalOpen(true)}
+                label={mode === "uncloak" ? "UNCLOAK" : "DONE"}
+                onClick={mode === "uncloak" ? handleUncloak : () => handleReset()}
                 sx={{ height: 40 }}
               />)
             }
@@ -620,7 +687,7 @@ export default function CloakForm() {
             <ConfirmModal 
                open={resetModalOpen}
                onClose={() => setResetModalOpen(false)}
-               titleIcon={<img src={questionIcon} alt="Warning icon" />}
+               titleIcon={<img src={exclamationIcon} alt="Warning icon" />}
                title="Warning!"
                description="This will clear all data related to your query. You will not be able to Uncloak responses related to this query. Are you sure you want to reset?"
                secondaryButton={
