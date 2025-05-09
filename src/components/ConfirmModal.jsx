@@ -41,7 +41,7 @@ export default function ConfirmModal({
           </Stack>
 
           {/* Description */}
-          <Typography sx={{ fontStyle: 'italic', color: '#757575' }} component="div">
+          <Typography sx={{ color: '#757575' }} component="div">
             {description}
           </Typography>
 
