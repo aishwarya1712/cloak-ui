@@ -218,7 +218,7 @@ export default function CloakForm() {
 
   async function callStreamingApi() {
     setIsLoading(true);
-    const response = await fetch('https://7b1e-73-151-92-222.ngrok-free.app/cloak', {
+    const response = await fetch('https://eafd-73-151-92-222.ngrok-free.app/cloak', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
