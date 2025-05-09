@@ -27,6 +27,7 @@ import exclamationIcon from "../assets/icons/ep_warning.svg"
 import piiReasoning from '../data/pii_reasoning.json'
 import ConfirmModal from './ConfirmModal';
 import cloakIcon from "../assets/icons/CloakIcon.png"
+import LoadingModal from './LoadingModal';
 
 export default function CloakForm() {
   //Can you help me plan a vacation? My name is Emily Davis, and I live in Dallas, Texas. I'm looking to go to Hawaii next month with my family for my birthday, which is on May 10th. I'd like to book flights from Dallas/Fort Worth Airport to Honolulu. What should my itinerary be?"
@@ -45,6 +46,7 @@ export default function CloakForm() {
   const [selectedPiiIds, setSelectedPiiIds] = useState([]);
   const [uncloakModalOpen, setUncloakModalOpen] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [loadingModalOpen, setLoadingModalOpen] = useState(false)
   const [privacyModalOpen, setPrivacyModalOpen] = useState(false);
   const redactedTextRef = React.useRef(null);
 
@@ -377,7 +379,7 @@ const getRedactedComponents = (plainText, suggestions) => {
           component="span"
           key={sugg.id}
           fontWeight="bold"
-          color="#000000"
+          color="#757575"
         >
           {target}
         </Typography>
@@ -497,10 +499,10 @@ const getRedactedComponents = (plainText, suggestions) => {
   const labelInstructions = {
     edit: "Enter text into the box and click ”Cloak”.",
     highlight: `Cloak found ${piiData ? piiData.length : 0} instances of personal information.`,
-    redacted: "Copy the Cloaked text and paste it into your AI tool of choice.",
+    redacted: "You're all set. Now copy the redacted text and paste it into your preferred AI tool.\nAfter you've finished this, click “Phase 2” to see what comes next.",
     no_pii: "Click “Clear” to Cloak a new piece of text.",
     uncloak: "Enter the response from your AI tool into the box and click “Uncloak”.",
-    final: "Your text is now Uncloaked! When you're ready, click “Done”."
+    final: "Your text is now Uncloaked! When you're finished, click “Done”."
   }
 
   const subtext = {
@@ -521,11 +523,12 @@ const getRedactedComponents = (plainText, suggestions) => {
     if (mode === "highlight" || mode === "no_pii") {
       return (
         <Stack spacing={1} mt={4} mb={1}>
-          <Typography sx={{ fontSize: '14px' }} mt={4} mb={1} fontWeight={700}>
-            Suggested Changes
+          <Typography sx={{ fontSize: '14px'}}fontWeight={700}>
+          Select the changes you wish to make and click “Accept”.
           </Typography>
-          {subtext[mode]}
+          {/* {subtext[mode]} */}
   
+        <Box sx={{pt: 1}}>
           {piiData.map(e => (
             <Accordion
               key={e.id}
@@ -552,7 +555,7 @@ const getRedactedComponents = (plainText, suggestions) => {
                     onClick={ev => ev.stopPropagation()}
                     onFocus={ev => ev.stopPropagation()}
                   />
-                  <Stack direction="row" alignItems="center">
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
                     <Typography sx={{ color: '#004D9F', fontWeight: 700 }}>
                       {e.pii_text}
                     </Typography>
@@ -572,8 +575,9 @@ const getRedactedComponents = (plainText, suggestions) => {
               </AccordionDetails>
             </Accordion>
           ))}
+          </Box>
   
-          {piiData.length > 0 && <Stack direction="row" spacing={1} alignItems="center">
+          {piiData.length > 0 && <Stack direction="row" spacing={1} alignItems="center" sx={{pt: "15px"}}>
             <SecondaryButton
               label="SELECT ALL"
               onClick={() => setSelectedPiiIds(piiData.map(item => item.id))}
@@ -606,7 +610,7 @@ const getRedactedComponents = (plainText, suggestions) => {
             <Typography sx={{ fontSize: '13px', mt: 0.5 }}>
               The smartest thing you'll never send.
             </Typography>
-            <Stack direction={"row"} alignItems={"center"} spacing={1} sx={{cursor: "pointer"}} onClick={() => setPrivacyModalOpen(true)}>
+            <Stack direction={"row"} alignItems={"center"} spacing={0.5} sx={{cursor: "pointer"}} onClick={() => setPrivacyModalOpen(true)}>
               <img src={shieldInfoIcon} alt="shield info icon" style={{cursor: "pointer", height: "16px"}} />
               <Typography sx={{width: "100px", fontSize: "12px", color: "#757575"}}>Privacy Policy</Typography>
             </Stack>
@@ -620,7 +624,7 @@ const getRedactedComponents = (plainText, suggestions) => {
       <Stack direction="row" spacing={2} divider={<Divider orientation="vertical" flexItem />}>
         {/* Left side - 65% */}
         <Box sx={{ width: mode === 'highlight' ? '65%': '100%' }}>
-          <Typography sx={{ fontSize: '14px' }} mt={4} mb={1} fontWeight={700}>
+          <Typography sx={{ whiteSpace: 'pre-line', fontSize: '14px' }} mt={4} mb={1} fontWeight={700}>
             {renderLabelArea()}
           </Typography>
           {renderInputArea()}
@@ -651,7 +655,7 @@ const getRedactedComponents = (plainText, suggestions) => {
               /> : 
               (mode === "highlight" || mode === "redacted" ? 
               <CTAButton
-                label={ "NEXT"}
+                label={ "Phase 2: Uncloaking"}
                 onClick={() => setUncloakModalOpen(true) }
                 sx={{ height: 40 }}
                 disabled={!hasCopied}
@@ -668,10 +672,10 @@ const getRedactedComponents = (plainText, suggestions) => {
               onClose={() => setUncloakModalOpen(false)}
               titleIcon={<img src={questionIcon} alt="Question icon" />}
               title="Optional: Do you want to Uncloak the response from your AI tool?"
-              description="Uncloaking will replace Cloaked terms with their original, non-redacted counterparts. This is an optional step."
+              description="You're viewing the AI's response with your personal details still cloaked. Would you like to Uncloak the response to see the original terms that were hidden?"
               secondaryButton={
                 <SecondaryButton
-                  label="NO, CLEAR ALL"
+                  label="NO, RESTART"
                   onClick={handleReset}
                   sx={{ fontWeight: 'bold', height: 40 }}
                 />
@@ -711,7 +715,7 @@ const getRedactedComponents = (plainText, suggestions) => {
                titleIcon={<img src={shieldIcon} alt="Shield info icon" />}
                title="Your Privacy, Fully Protected"
                description={
-                <Stack spacing={1}>
+                <Stack spacing={1} mb={1}>
                   <Typography>All data you enter is stored locally on your device for the duration of your session.</Typography>
                   <Typography>Redactions are powered by a local LLM running on your computer, so your personal information is never sent to third-party servers or major tech companies.</Typography>
                   <Typography>Our code is fully open source, and we never access or collect user data. You're in full control, always.</Typography>
@@ -725,6 +729,7 @@ const getRedactedComponents = (plainText, suggestions) => {
                  />
                }
             />
+            <LoadingModal open={isLoading}/>
           </Stack>
           
         </Box>
