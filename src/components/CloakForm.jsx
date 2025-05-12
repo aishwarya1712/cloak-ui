@@ -242,7 +242,7 @@ export default function CloakForm() {
     while (!done) {
       const { value, done: doneReading } = await reader.read();
       done = doneReading;
-      result += decoder.decode(value, { stream: true });
+      result = decoder.decode(value, { stream: true });
     }
   
     const jsonResponse = JSON.parse(result);
