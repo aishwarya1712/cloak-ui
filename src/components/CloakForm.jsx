@@ -154,7 +154,14 @@ export default function CloakForm() {
     document.addEventListener("copy", handleManualCopy);
     return () => document.removeEventListener("copy", handleManualCopy);
   }, []);
-  
+  const  isJsonString = (str) => {
+    try {
+        JSON.parse(str);
+    } catch (e) {
+        return false;
+    }
+    return true;
+   }
   const handleCopy = () => {
     if(mode ==="edit" || mode === "highlight" || mode === "redacted"){
       navigator.clipboard.writeText(text);
@@ -218,7 +225,7 @@ export default function CloakForm() {
 
   async function callStreamingApi() {
     setIsLoading(true);
-    const response = await fetch('https://eafd-73-151-92-222.ngrok-free.app/cloak', {
+    const response = await fetch('http://127.0.0.1:8000/cloak', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -238,13 +245,23 @@ export default function CloakForm() {
     const decoder = new TextDecoder();
     let result = '';
     let done = false;
-  
-    while (!done) {
-      const { value, done: doneReading } = await reader.read();
-      done = doneReading;
-      result += decoder.decode(value, { stream: true });
+    try{
+        while (!done) {
+          const { value, done: doneReading } = await reader.read();
+          console.log("value "+ value)
+          done = doneReading;
+          const decoded = decoder.decode(value, { stream: true });
+          if(isJsonString(decoded)){
+            result = decoded
+          }else{
+            console.log(decoded)
+          }
+          console.log("Received chunk:", result);
+        }
+      } catch (error) {
+      console.error('Stream error:', error);
     }
-  
+    console.log(result)
     const jsonResponse = JSON.parse(result);
     // When the entire response is received, you can do something with the result
     console.log('Received full response from server:', jsonResponse);
