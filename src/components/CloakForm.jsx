@@ -244,44 +244,62 @@ export default function CloakForm() {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let result = '';
-    let done = false;
+    let hasPii = false;
     try{
-        while (!done) {
-          const { value, done: doneReading } = await reader.read();
-          console.log("value "+ value)
-          done = doneReading;
-          const decoded = decoder.decode(value, { stream: true });
-          if(isJsonString(decoded)){
-            result = decoded
-          }else{
-            console.log(decoded)
+        while (true) {
+         
+          const { value, done } = await reader.read();
+          if (done) break;
+          result += decoder.decode(value, { stream: true });
+          const lines = result.split("\n").filter((line) => line.trim() !== "");
+         
+          for (const line of lines) {
+            try {
+              if(!isJsonString(line)){
+                continue
+              }
+              else{
+                setIsLoading(false);
+              }
+              const jsonRes = JSON.parse(line);
+              console.log('Received full response from server:', jsonRes);
+              if (jsonRes.results) {
+                const counts = {};
+                const results  = jsonRes.results;
+                if(results.length === 0){
+                  continue;
+                }
+                else{
+                     hasPii = true;
+                }
+                const sorted = [...results].sort(
+                  (a, b) => text.indexOf(a.pii_text) - text.indexOf(b.pii_text)
+                 );
+                const computedSuggestions = sorted.map((item, key) => {
+                  counts[item.pii_type] = (counts[item.pii_type] || 0) + 1;
+                  return { ...item, id: "pii_" + key, redacted_value: item.pii_type + counts[item.pii_type] };
+                });
+                if (computedSuggestions.length > 0){
+                  setMode("highlight");
+                }
+                setPiiData(computedSuggestions);
+                setOriginalPiiData(computedSuggestions)
+              }
+            } catch (e) {
+              console.error("Error parsing JSON:", e);
+            }
           }
-          console.log("Received chunk:", result);
+          result = "";
         }
       } catch (error) {
       console.error('Stream error:', error);
     }
-    console.log(result)
-    const jsonResponse = JSON.parse(result);
-    // When the entire response is received, you can do something with the result
-    console.log('Received full response from server:', jsonResponse);
-    const results = jsonResponse["results"]
-    const counts = {};
-    const sorted = [...results].sort(
-          (a, b) => text.indexOf(a.pii_text) - text.indexOf(b.pii_text)
-       );
-    const computedSuggestions = sorted.map((item, key) => {
-      counts[item.pii_type] = (counts[item.pii_type] || 0) + 1;
-      return { ...item, id: "pii_" + key, redacted_value: item.pii_type + counts[item.pii_type] };
-    });
-    setPiiData(computedSuggestions);
-    setOriginalPiiData(computedSuggestions);
-    if(results.length === 0){
+  
+    if(!hasPii){
       setMode("no_pii");
     } else {
       setMode("highlight");
     }
-    setIsLoading(false);
     setSelectedPiiIds([]);
   }
 
@@ -746,7 +764,7 @@ const getRedactedComponents = (plainText, suggestions) => {
                  />
                }
             />
-            <LoadingModal open={isLoading}/>
+            {/*<LoadingModal open={isLoading}/>*/}
           </Stack>
           
         </Box>
